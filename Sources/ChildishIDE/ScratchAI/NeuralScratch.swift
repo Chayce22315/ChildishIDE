@@ -192,38 +192,38 @@ final class MLPNextCharacter {
 // MARK: - Symbol codec
 
 enum SymbolCodec {
-    static let symbols: [Character] = {
+    /// Single lazy initialization avoids cross-static dependency / threading edge cases at first access.
+    private static let built: (symbols: [Character], indexByChar: [Character: Int]) = {
         let base = " abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,!?:;()[]{}<>/\\\"'\n\t-_=+*&#@"
         var seen = Set<Character>()
-        var out: [Character] = []
+        var symbols: [Character] = []
         for c in base {
             if seen.insert(c).inserted {
-                out.append(c)
+                symbols.append(c)
             }
         }
-        return out
+        var indexByChar: [Character: Int] = [:]
+        for (i, c) in symbols.enumerated() {
+            indexByChar[c] = i
+        }
+        return (symbols, indexByChar)
     }()
 
-    static let indexByChar: [Character: Int] = {
-        var m: [Character: Int] = [:]
-        for (i, c) in symbols.enumerated() {
-            m[c] = i
-        }
-        return m
-    }()
+    static var symbols: [Character] { built.symbols }
 
     static func index(for char: Character) -> Int {
-        indexByChar[char] ?? 0
+        built.indexByChar[char] ?? 0
     }
 
     static func character(forIndex i: Int) -> Character {
-        guard i >= 0, i < symbols.count else { return symbols[0] }
-        return symbols[i]
+        let syms = built.symbols
+        guard i >= 0, i < syms.count else { return syms[0] }
+        return syms[i]
     }
 
     static func encodeContext(_ text: String, length: Int) -> [Float] {
-        let V = symbols.count
-        let pad = symbols[0]
+        let V = built.symbols.count
+        let pad = built.symbols[0]
         var chars: [Character] = Array(repeating: pad, count: length)
         let arr = Array(text)
         let take = min(length, arr.count)

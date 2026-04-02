@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 
+@MainActor
 final class DocumentSession: ObservableObject {
     @Published private(set) var buffer: BufferState
     @Published private(set) var fileName: String

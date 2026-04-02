@@ -2,6 +2,7 @@ import Combine
 import Foundation
 
 /// On-device “AI” — tiny MLP trained from `ToyCorpus` only (no network I/O).
+@MainActor
 final class BrainService: ObservableObject {
     @Published private(set) var suggestions: [Character] = []
     @Published private(set) var lastTrainSteps: Int = 0

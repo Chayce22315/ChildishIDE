@@ -1,6 +1,14 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+private let fileImportTypes: [UTType] = {
+    var types: [UTType] = [.plainText, .utf8PlainText, .json, .text]
+    if let swift = UTType(filenameExtension: "swift") {
+        types.append(swift)
+    }
+    return types
+}()
+
 struct ContentView: View {
     @EnvironmentObject private var document: DocumentSession
     @EnvironmentObject private var brain: BrainService
@@ -35,35 +43,43 @@ struct ContentView: View {
             )
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
-            .onAppear {
+            .task {
                 draftText = document.buffer.text
                 brain.refreshSuggestions(for: draftText)
             }
-            .onChange(of: document.buffer.text) { _, newValue in
-                if newValue != draftText {
-                    draftText = newValue
+            .onChange(of: document.buffer) { _, newBuffer in
+                if newBuffer.text != draftText {
+                    draftText = newBuffer.text
                 }
             }
             .fileImporter(
                 isPresented: $showImporter,
-                allowedContentTypes: [.plainText, .swiftSource, .json, .utf8PlainText],
+                allowedContentTypes: fileImportTypes,
                 allowsMultipleSelection: false,
             ) { result in
-                switch result {
-                case let .success(urls):
-                    guard let url = urls.first else { return }
-                    do {
-                        let got = try String(contentsOf: url, encoding: .utf8)
-                        let name = url.lastPathComponent
-                        document.setFromOpen(name: name, text: got)
-                        draftText = got
-                        footerNote = "Opened \(name) — wheee!"
-                        brain.refreshSuggestions(for: draftText)
-                    } catch {
-                        footerNote = "Could not read that file."
+                Task { @MainActor in
+                    switch result {
+                    case let .success(urls):
+                        guard let url = urls.first else { return }
+                        let accessing = url.startAccessingSecurityScopedResource()
+                        defer {
+                            if accessing {
+                                url.stopAccessingSecurityScopedResource()
+                            }
+                        }
+                        do {
+                            let got = try String(contentsOf: url, encoding: .utf8)
+                            let name = url.lastPathComponent
+                            document.setFromOpen(name: name, text: got)
+                            draftText = got
+                            footerNote = "Opened \(name) — wheee!"
+                            brain.refreshSuggestions(for: draftText)
+                        } catch {
+                            footerNote = "Could not read that file."
+                        }
+                    case let .failure(err):
+                        footerNote = "Import failed: \(err.localizedDescription)"
                     }
-                case let .failure(err):
-                    footerNote = "Import failed: \(err.localizedDescription)"
                 }
             }
         }
