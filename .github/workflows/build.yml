@@ -1,0 +1,50 @@
+# Single job: generate Xcode project, build Simulator .app, zip Payload -> .ipa (unsigned, no -exportArchive).
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build and package unsigned IPA layout
+        run: |
+          set -euo pipefail
+          DERIVED="${GITHUB_WORKSPACE}/DerivedData"
+          rm -rf Payload ChildishIDE.ipa ChildishIDE.zip
+          xcodebuild \
+            -project ChildishIDE.xcodeproj \
+            -scheme ChildishIDE \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "${DERIVED}" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+          APP_PATH="$(find "${DERIVED}" -path '*/Debug-iphonesimulator/ChildishIDE.app' -type d | head -n 1)"
+          if [ -z "${APP_PATH}" ]; then
+            APP_PATH="$(find "${DERIVED}" -name 'ChildishIDE.app' -type d | head -n 1)"
+          fi
+          test -n "${APP_PATH}"
+          test -d "${APP_PATH}"
+          mkdir -p Payload
+          cp -R "${APP_PATH}" Payload/
+          zip -r ChildishIDE.zip Payload
+          mv ChildishIDE.zip ChildishIDE.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ChildishIDE-unsigned-ipa
+          path: ChildishIDE.ipa
