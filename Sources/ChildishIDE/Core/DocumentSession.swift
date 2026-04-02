@@ -1,14 +1,16 @@
 import Combine
 import Foundation
 
-@MainActor
 final class DocumentSession: ObservableObject {
+    /// Shared with `ContentView` so `TextEditor` and the model start on identical text (avoids first-layout fights).
+    static let defaultBufferText = "// Tap Open to pick a file!\n"
+
     @Published private(set) var buffer: BufferState
     @Published private(set) var fileName: String
 
     private let events: EventBus
 
-    init(events: EventBus, initial: BufferState = BufferState(text: "// Tap Open to pick a file!\n", isDirty: false)) {
+    init(events: EventBus, initial: BufferState = BufferState(text: DocumentSession.defaultBufferText, isDirty: false)) {
         self.events = events
         fileName = "untitled"
         buffer = initial

@@ -2,7 +2,6 @@ import Combine
 import Foundation
 
 /// Composition root for the app target.
-@MainActor
 final class ServiceRegistry: ObservableObject {
     let events: EventBus
     let document: DocumentSession

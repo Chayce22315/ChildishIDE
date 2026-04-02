@@ -187,6 +187,66 @@ final class MLPNextCharacter {
         let sorted = pairs.sorted { $0.1 > $1.1 }
         return sorted.prefix(k).map(\.0)
     }
+
+    /// Log-softmax for stable beam scoring.
+    func logSoftmax(_ logits: [Float]) -> [Float] {
+        let V = vocabSize
+        var mx = logits[0]
+        for k in 1 ..< V {
+            mx = max(mx, logits[k])
+        }
+        var exps = [Float](repeating: 0, count: V)
+        var sum: Float = 0
+        for k in 0 ..< V {
+            let v = exp(logits[k] - mx)
+            exps[k] = v
+            sum += v
+        }
+        let logSum = log(sum)
+        var out = [Float](repeating: 0, count: V)
+        for k in 0 ..< V {
+            out[k] = log(exps[k]) - logSum
+        }
+        return out
+    }
+
+    /// Multi-character snippets by shallow beam search over next-char predictions.
+    func beamSnippets(fromFullText text: String, depth: Int, beamWidth: Int, charTopK: Int, limit: Int) -> [String] {
+        struct Beam {
+            var suffix: String
+            var logP: Float
+        }
+
+        var beams: [Beam] = [Beam(suffix: "", logP: 0)]
+
+        for _ in 0 ..< depth {
+            var candidates: [Beam] = []
+            candidates.reserveCapacity(beams.count * charTopK)
+            for b in beams {
+                let ctx = text + b.suffix
+                let logits = forward(SymbolCodec.encodeContext(ctx, length: contextLength))
+                let logp = logSoftmax(logits)
+                let topIdx = topKIndices(logits: logits, k: charTopK)
+                for idx in topIdx {
+                    let ch = SymbolCodec.character(forIndex: idx)
+                    candidates.append(Beam(suffix: b.suffix + String(ch), logP: b.logP + logp[idx]))
+                }
+            }
+            candidates.sort { $0.logP > $1.logP }
+            if candidates.isEmpty { break }
+            beams = Array(candidates.prefix(beamWidth))
+        }
+
+        var seen = Set<String>()
+        var out: [String] = []
+        for b in beams.sorted(by: { $0.logP > $1.logP }) where !b.suffix.isEmpty {
+            if seen.insert(b.suffix).inserted {
+                out.append(b.suffix)
+                if out.count >= limit { break }
+            }
+        }
+        return out
+    }
 }
 
 // MARK: - Symbol codec
